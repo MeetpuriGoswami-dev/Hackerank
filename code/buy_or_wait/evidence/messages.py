@@ -37,7 +37,14 @@ class MessageFactExtractor:
             date_match = re.search(r"(\d{4}-\d{2}-\d{2})", txt)
 
             # Check for contract end / termination
-            if "contract has ended" in txt.lower() or "seasonal contract has ended" in txt.lower():
+            txt_lower = txt.lower()
+            if (
+                "contract has ended" in txt_lower
+                or "employment has ended" in txt_lower
+                or "telah berakhir" in txt_lower
+                or "no regular salary" in txt_lower
+                or "no off-season income" in txt_lower
+            ):
                 terminated_income_users.add(uid)
                 if evt_id:
                     event_amendments[evt_id] = {"status": "cancelled"}

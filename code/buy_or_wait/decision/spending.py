@@ -55,14 +55,8 @@ class SpendingOptimizer:
                 continue
             seen_targets.add(target_id)
 
-            can_reduce = (
-                "reducible" in flex
-                and evt.category in profile.reducible_categories
-            )
-            can_stop = (
-                "stoppable" in flex
-                and evt.category in profile.stoppable_categories
-            )
+            can_stop = evt.category in profile.stoppable_categories
+            can_reduce = evt.category in profile.reducible_categories
 
             if can_stop:
                 eligible_actions.append(

@@ -43,7 +43,7 @@ class CapacityCalculator:
                 base_events=base_events,
                 plan=probe_plan,
             )
-            return sim_res.first_breach_date is None
+            return sim_res.first_breach_date is None or sim_res.first_breach_date > desired_completion_date
 
         # Check full requested amount first
         if is_safe_for_amount(requested_amount):

@@ -84,6 +84,7 @@ def run_pipeline(dataset_dir: Path, output_file: Path, requests_filename: str = 
             profile=prof,
             image_amounts=image_amounts,
             message_amendments=event_amendments,
+            request_date=req.request_date,
         )
 
         # Recurrence projection
@@ -140,7 +141,7 @@ def run_pipeline(dataset_dir: Path, output_file: Path, requests_filename: str = 
                 base_events=all_user_events,
                 plan=cand,
             )
-            if sim_res.safe:
+            if sim_res.safe and not (cand.method == "full_payment" and amount_safe_today < req.requested_amount):
                 safe_plans.append(cand)
             else:
                 # Try finding spending changes to make candidate safe
