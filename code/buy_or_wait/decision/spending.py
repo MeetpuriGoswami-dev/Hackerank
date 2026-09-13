@@ -50,7 +50,7 @@ class SpendingOptimizer:
             if flex == "fixed":
                 continue
 
-            target_id = evt.source_event_ids[0] if evt.source_event_ids else evt.event_id
+            target_id = evt.event_id if not evt.is_recurring else (evt.source_event_ids[0] if evt.source_event_ids else evt.event_id)
             if target_id in seen_targets:
                 continue
             seen_targets.add(target_id)

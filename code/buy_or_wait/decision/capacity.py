@@ -25,48 +25,26 @@ class CapacityCalculator:
         if requested_amount <= Decimal("0"):
             return Decimal("0")
 
-        # Probe helper
-        def is_safe_for_amount(amt: Decimal) -> bool:
-            if amt <= Decimal("0"):
-                return True
-            probe_plan = CandidatePlan(
-                method="full_payment",
-                payments=[Payment(payment_date=request_date, amount=amt)],
-                changes=[],
-                total_payable=amt,
-            )
-            sim_res = self.simulator.simulate_90_days(
-                request_date=request_date,
-                requested_amount=amt,
-                desired_completion_date=desired_completion_date,
-                profile=profile,
-                base_events=base_events,
-                plan=probe_plan,
-            )
-            return sim_res.first_breach_date is None or sim_res.first_breach_date > desired_completion_date
+        # Simulate baseline 90-day balance timeline without requested payment
+        empty_plan = CandidatePlan(
+            method="wait",
+            payments=[],
+            changes=[],
+            total_payable=Decimal("0"),
+        )
+        sim_res = self.simulator.simulate_90_days(
+            request_date=request_date,
+            requested_amount=Decimal("0"),
+            desired_completion_date=desired_completion_date,
+            profile=profile,
+            base_events=base_events,
+            plan=empty_plan,
+        )
 
-        # Check full requested amount first
-        if is_safe_for_amount(requested_amount):
-            return requested_amount
-
-        # Binary search for maximum safe amount
-        low = Decimal("0")
-        high = requested_amount
-        step = Decimal("0.01")
-        best_safe = Decimal("0")
-
-        # Binary search
-        iters = 0
-        while high - low >= step and iters < 30:
-            iters += 1
-            mid = quantize_money((low + high) / Decimal("2"), 2)
-            if is_safe_for_amount(mid):
-                best_safe = mid
-                low = mid + step
-            else:
-                high = mid - step
-
-        return best_safe
+        min_headroom = sim_res.minimum_balance - profile.minimum_balance_to_keep
+        safe_amount = max(Decimal("0"), min_headroom)
+        safe_amount = min(requested_amount, safe_amount)
+        return quantize_money(safe_amount, 2)
 
     def calculate_earliest_date_for_full_payment(
         self,

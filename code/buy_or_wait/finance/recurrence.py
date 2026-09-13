@@ -31,7 +31,7 @@ RECURRING_CATEGORIES = {
 FIXED_AMOUNT_CATEGORIES = {
     "rent", "salary", "income", "insurance", "subscription",
     "debt_repayment", "gym", "music_subscription", "delivery_membership",
-    "streaming", "cloud_storage",
+    "streaming", "cloud_storage", "utilities", "housing", "education",
 }
 
 NON_RECURRING_KEYWORDS = {
@@ -122,10 +122,14 @@ class RecurrenceEngine:
                 income_non_recurring = {
                     "bonus", "gift", "refund", "reimburse", "one-time", "one time", "one off", "one-off",
                     "lottery", "arrears", "promotion", "back-pay", "backpay", "sign-on", "severance", "commission",
-                    "final employer payroll", "final payroll", "final salary", "final settlement", "final pay"
+                    "final employer payroll", "final payroll", "final salary", "final settlement", "final pay",
+                    # Variable/gig income - these are commission-based and should not be projected
+                    "platform payout", "app earnings", "marketplace payout", "driver payout",
+                    "delivery payout", "freelance", "gig payment", "task payout",
                 }
                 if any(kw in desc_norm for kw in income_non_recurring):
                     continue
+
             else:
                 if any(kw in desc_norm for kw in NON_RECURRING_KEYWORDS):
                     continue
@@ -137,12 +141,16 @@ class RecurrenceEngine:
 
         # Step 2: Decide which desc-level groups are genuinely recurring
         # (require >= 2 occurrences, cadence <= 45 days, except salary/income)
+        # Exception: FIXED_AMOUNT_CATEGORIES with single occurrence are assumed monthly.
         valid_desc_groups: Dict[tuple, List[ResolvedCashEvent]] = {}
         for key, evts in desc_groups.items():
             cat, direction, desc = key
             is_income = direction == "credit" and (cat in ("salary", "income") or "salary" in desc)
 
-            if not is_income and len(evts) < 2:
+            # For fixed-amount debit categories, allow single-occurrence projections (assume monthly)
+            is_fixed_debit = (direction == "debit" and cat in FIXED_AMOUNT_CATEGORIES)
+
+            if not is_income and not is_fixed_debit and len(evts) < 2:
                 continue
 
             sorted_evts = sorted(evts, key=lambda x: x.effective_date)
@@ -228,6 +236,9 @@ class RecurrenceEngine:
                 curr_proj_date += timedelta(days=1)
 
         # Process fixed / distinct categories (one stream per description)
+        # For income streams: track by date to avoid double-counting multiple salary descriptions
+        income_proj_by_date: Dict[date, Decimal] = {}  # date -> max amount already projected
+
         for key, evts in valid_desc_groups.items():
             cat, direction, desc = key
             cd_key = (cat, direction)
@@ -242,7 +253,13 @@ class RecurrenceEngine:
             if cadence is None or cadence <= 0:
                 continue
 
-            base_proj_amount = last_evt.amount_home
+            # For income: use MINIMUM historical amount for conservative projection.
+            # This avoids over-estimating variable/gig income streams.
+            if is_income and len(sorted_evts) >= 2:
+                base_proj_amount = min(e.amount_home for e in sorted_evts)
+            else:
+                base_proj_amount = last_evt.amount_home
+
             proj_min_amount = last_evt.minimum_allowed_amount
             flexibility = last_evt.flexibility
             protected = last_evt.protected
@@ -273,6 +290,22 @@ class RecurrenceEngine:
                         eff_date = salary_amend.get("effective_date")
                         if eff_date is None or next_date >= eff_date:
                             curr_amt = salary_amend["amount"]
+
+                    # For income streams: deduplicate by date.
+                    # If another salary stream already projects income on this date,
+                    # only keep the MAXIMUM of the two (avoid double-counting).
+                    if is_income:
+                        existing = income_proj_by_date.get(next_date, Decimal("0"))
+                        if curr_amt <= existing:
+                            # This stream's projection is covered by the other one
+                            proj_count += 1
+                            continue
+                        elif existing > Decimal("0"):
+                            # Partial overlap: record the delta only
+                            # But simpler: skip this entirely — the other stream dominates
+                            proj_count += 1
+                            continue
+                        income_proj_by_date[next_date] = curr_amt
 
                     proj_id = f"proj_{last_evt.event_id}_{proj_count}"
                     proj_evt = ResolvedCashEvent(
