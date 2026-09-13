@@ -36,8 +36,8 @@ class PlanRanker:
             completes_by_deadline,
             no_changes,
             total_paid,
-            num_payments,
             first_date,
+            num_payments,
             opt_num,
         )
 

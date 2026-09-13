@@ -53,9 +53,6 @@ class CapacityCalculator:
         low = Decimal("0")
         high = requested_amount
         step = Decimal("0.01")
-        if profile.home_currency in ("IDR", "INR", "ZAR"):
-            step = Decimal("1")  # Integer steps for integer currencies
-
         best_safe = Decimal("0")
 
         # Binary search

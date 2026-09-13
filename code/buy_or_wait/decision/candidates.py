@@ -55,6 +55,10 @@ class CandidateGenerator:
         # 3. Installments from supplied payment options
         if "installments" in user_methods:
             for opt in payment_options:
+                # ONLY create installment candidates from options where payment_method == "installments"
+                if opt.payment_method != "installments":
+                    continue
+
                 # Check max_installment_months if specified
                 if profile.max_installment_months is not None:
                     if opt.number_of_payments > profile.max_installment_months:
@@ -76,6 +80,10 @@ class CandidateGenerator:
 
                     pmts.append(Payment(payment_date=pmt_date, amount=pmt_amt))
 
+                completion_date = max(p.payment_date for p in pmts) if pmts else opt.first_payment_date
+                if completion_date > request.desired_completion_date:
+                    continue
+
                 inst_plan = CandidatePlan(
                     method="installments",
                     payments=pmts,
@@ -85,6 +93,7 @@ class CandidateGenerator:
                     earliest_date_for_full_payment=earliest_date_for_full_payment,
                 )
                 candidates.append(inst_plan)
+
 
         # 4. Wait for full payment later
         if (
